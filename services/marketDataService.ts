@@ -22,10 +22,12 @@ export const fetchMarketData = async (
   const res = await fetch(url);
   if (!res.ok) {
     console.error('Backend chart error', res.status);
+    // optionally fallback to MOCK_CHART_DATA
     return [];
   }
 
   const data = await res.json();
+
   return (data.candles || []).map((c: any) => {
     const dt = new Date(c.time);
     const time = `${dt.getHours().toString().padStart(2, '0')}:${dt
@@ -52,18 +54,25 @@ export const fetchScreenerData = async (): Promise<ScreenerTicker[]> => {
     return [];
   }
   const data = await res.json();
+
   return data.items.map((item: any) => ({
     symbol: item.symbol,
-    price: item.price,
-    change: 0,
+    price: Number(item.price),
+    change: 0, // still 0 until you add day-change logic
     changePercent: 0,
-    high: item.price,
-    low: item.price,
+    high: Number(item.price), // can refine later
+    low: Number(item.price),
     volume: 0,
-    rsi: 50,
-    trend: item.trend === 'Bullish' ? 'UP' : item.trend === 'Bearish' ? 'DOWN' : 'SIDEWAYS',
-    signal: 'NEUTRAL',
-    volatility: 'MEDIUM',
+    rsi: Math.round(item.rsi),
+    trend:
+      item.trend === 'Bullish'
+        ? 'UP'
+        : item.trend === 'Bearish'
+        ? 'DOWN'
+        : 'SIDEWAYS',
+    signal: item.signal as ScreenerTicker['signal'],
+    volatility:
+      item.volatility_band as ScreenerTicker['volatility'], // "LOW" | "MEDIUM" | "HIGH"
     timestamp: item.timestamp, // EAT (+3) from backend
   }));
 };
