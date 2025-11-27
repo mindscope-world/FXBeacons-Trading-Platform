@@ -1,74 +1,107 @@
 import { ChartDataPoint, ScreenerTicker } from '../types';
-import { SERP_API_KEY, MOCK_CHART_DATA, SCREENER_SYMBOLS } from '../constants';
+import { MOCK_CHART_DATA, SCREENER_SYMBOLS } from '../constants';
 
-export const fetchMarketData = async (symbol: string = 'EUR/USD', interval: string = '1D'): Promise<ChartDataPoint[]> => {
+const FINNHUB_API_KEY = import.meta.env.VITE_FINNHUB_API_KEY as string;
+
+const FX_SYMBOL_MAP: Record<string, string> = {
+  'EUR/USD': 'OANDA:EUR_USD',
+  'GBP/USD': 'OANDA:GBP_USD',
+  'USD/JPY': 'OANDA:USD_JPY',
+  'XAU/USD': 'OANDA:XAU_USD',
+  // Add any others you use in your app
+};
+
+function toFinnhubSymbol(symbol: string): string {
+  if (FX_SYMBOL_MAP[symbol]) return FX_SYMBOL_MAP[symbol];
+  const [base, quote] = symbol.split('/');
+  return `OANDA:${base}_${quote}`;
+}
+
+// interval: Finnhub resolution: '1','5','15','30','60','D'
+export const fetchMarketData = async (
+  symbol: string = 'EUR/USD',
+  interval: '1' | '5' | '15' | '30' | '60' | 'D' = '15'
+): Promise<ChartDataPoint[]> => {
   try {
-    // Google Finance typically uses dash for pairs like "EUR-USD" or "GOOGL:NASDAQ"
-    // For this app we assume input is "EUR/USD" so we convert to "EUR-USD"
-    const query = symbol.replace('/', '-');
-    
-    // Construct SerpApi URL for Google Finance
-    // window=1D gives us intraday data points
-    const url = `https://serpapi.com/search.json?engine=google_finance&q=${query}&window=1D&api_key=${SERP_API_KEY}`;
-    
-    // Note: Calling SerpApi directly from browser might be blocked by CORS depending on the key's permissions.
-    // If blocked, the catch block will trigger and return fallback data.
-    const response = await fetch(url);
-    
+    if (!FINNHUB_API_KEY) {
+      console.error('Missing VITE_FINNHUB_API_KEY in env.');
+      return MOCK_CHART_DATA;
+    }
+
+    const finnhubSymbol = toFinnhubSymbol(symbol);
+    const resolution = interval;
+
+    const now = Math.floor(Date.now() / 1000);
+    // last 24h for intraday; tweak as desired
+    const from = now - 60 * 60 * 24;
+
+    const url = new URL('https://finnhub.io/api/v1/forex/candle');
+    url.searchParams.set('symbol', finnhubSymbol);
+    url.searchParams.set('resolution', resolution);
+    url.searchParams.set('from', String(from));
+    url.searchParams.set('to', String(now));
+    url.searchParams.set('token', FINNHUB_API_KEY);
+
+    const response = await fetch(url.toString());
     if (!response.ok) {
-        throw new Error(`SerpApi request failed: ${response.status} ${response.statusText}`);
+      throw new Error(`Finnhub request failed: ${response.status} ${response.statusText}`);
     }
 
     const data = await response.json();
-
-    // Check if graph data exists in the response
-    if (!data.graph || !Array.isArray(data.graph)) {
-        console.warn('No graph data found in SerpApi response. Using fallback data.');
-        return MOCK_CHART_DATA;
+    // Expected shape: { c:[], o:[], h:[], l:[], v:[], t:[], s:'ok'|'no_data' }
+    if (data.s !== 'ok' || !Array.isArray(data.t)) {
+      console.warn('No Finnhub candle data; using fallback mock data.');
+      return MOCK_CHART_DATA;
     }
 
-    // Transform Google Finance Graph data (Date + Price) to ChartDataPoint (OHLC)
-    // Since we only get a single price point for the line chart, we map O=H=L=C=Price
-    const transformedData: ChartDataPoint[] = data.graph.map((point: any) => {
-        const dateObj = new Date(point.date);
-        const time = `${dateObj.getHours().toString().padStart(2, '0')}:${dateObj.getMinutes().toString().padStart(2, '0')}`;
-        const price = point.price;
+    const transformed: ChartDataPoint[] = data.t.map((ts: number, idx: number) => {
+      const date = new Date(ts * 1000);
+      const time = `${date.getHours().toString().padStart(2, '0')}:${date
+        .getMinutes()
+        .toString()
+        .padStart(2, '0')}`;
 
-        return {
-            time,
-            open: price,
-            high: price,
-            low: price,
-            close: price,
-            volume: 0 // Volume is not always provided in the graph summary
-        };
+      return {
+        time,
+        open: data.o[idx],
+        high: data.h[idx],
+        low: data.l[idx],
+        close: data.c[idx],
+        volume: data.v ? data.v[idx] : 0,
+      };
     });
 
-    return transformedData.length > 0 ? transformedData : MOCK_CHART_DATA;
-
+    return transformed.length > 0 ? transformed : MOCK_CHART_DATA;
   } catch (error) {
-    console.error("Failed to fetch market data (using fallback):", error);
-    // Return mock data so the app remains functional even if API quota is hit or CORS blocks it
+    console.error('Failed to fetch Finnhub market data (using fallback):', error);
     return MOCK_CHART_DATA;
   }
 };
 
+// interval: Finnhub resolution: '1','5','15','30','60','D'
 export const fetchScreenerData = async (): Promise<ScreenerTicker[]> => {
-  // Simulating live market scan for multiple pairs. 
+  // Simulating live market scan for multiple pairs.
   // In a production app, this would use a batch API endpoint or WebSocket.
-  
   return new Promise((resolve) => {
     setTimeout(() => {
       const data: ScreenerTicker[] = SCREENER_SYMBOLS.map(symbol => {
-        // Generate pseudo-random realistic data
-        const basePrice = symbol.includes('JPY') ? 145.00 : (symbol.includes('BTC') ? 65000 : (symbol.includes('XAU') ? 2300 : 1.0800));
-        const variance = symbol.includes('BTC') ? 1000 : (symbol.includes('JPY') ? 0.5 : 0.0050);
-        
-        const changePercent = (Math.random() * 2 - 1); // -1% to +1%
-        const price = basePrice + (Math.random() * variance);
+        const basePrice = symbol.includes('JPY')
+          ? 145.0
+          : symbol.includes('BTC')
+          ? 65000
+          : symbol.includes('XAU')
+          ? 2300
+          : 1.08;
+        const variance = symbol.includes('BTC')
+          ? 1000
+          : symbol.includes('JPY')
+          ? 0.5
+          : 0.005;
+
+        const changePercent = Math.random() * 2 - 1; // -1% to +1%
+        const price = basePrice + Math.random() * variance;
         const change = price * (changePercent / 100);
-        
-        // Random Technicals
+
         const rsi = 30 + Math.random() * 40; // 30-70
         let signal: ScreenerTicker['signal'] = 'NEUTRAL';
         if (rsi > 65) signal = 'STRONG_BUY';
@@ -77,14 +110,23 @@ export const fetchScreenerData = async (): Promise<ScreenerTicker[]> => {
         else if (rsi < 45) signal = 'SELL';
 
         const volatilityVal = Math.random();
-        const volatility: ScreenerTicker['volatility'] = volatilityVal > 0.8 ? 'HIGH' : (volatilityVal > 0.4 ? 'MEDIUM' : 'LOW');
+        const volatility: ScreenerTicker['volatility'] =
+          volatilityVal > 0.8 ? 'HIGH' : volatilityVal > 0.4 ? 'MEDIUM' : 'LOW';
 
-        // Explicitly define trend to match the ScreenerTicker interface type
-        const trend: ScreenerTicker['trend'] = changePercent > 0 ? 'UP' : (changePercent < -0.2 ? 'DOWN' : 'SIDEWAYS');
+        const trend: ScreenerTicker['trend'] =
+          changePercent > 0 ? 'UP' : changePercent < -0.2 ? 'DOWN' : 'SIDEWAYS';
 
         return {
           symbol,
-          price: Number(price.toFixed(symbol.includes('JPY') || symbol.includes('XAU') ? 2 : (symbol.includes('BTC') ? 0 : 5))),
+          price: Number(
+            price.toFixed(
+              symbol.includes('JPY') || symbol.includes('XAU')
+                ? 2
+                : symbol.includes('BTC')
+                ? 0
+                : 5,
+            ),
+          ),
           change: Number(change.toFixed(5)),
           changePercent: Number(changePercent.toFixed(2)),
           high: Number((price * 1.002).toFixed(5)),
@@ -93,7 +135,7 @@ export const fetchScreenerData = async (): Promise<ScreenerTicker[]> => {
           rsi: Math.floor(rsi),
           trend,
           signal,
-          volatility
+          volatility,
         };
       });
       resolve(data);

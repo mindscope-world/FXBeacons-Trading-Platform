@@ -48,33 +48,21 @@ const App: React.FC = () => {
   }, [theme]);
 
   const loadMarketData = async () => {
-    setIsLoadingData(true);
-    // Use activePair for fetching data
-    const rawData = await fetchMarketData(activePair, '15min');
-    // Add SMA, RSI, Bollinger Bands locally
-    const enrichedData = enrichDataWithIndicators(rawData);
-    setChartData(enrichedData);
-    
-    if (enrichedData.length > 0) {
-      const lastPoint = enrichedData[enrichedData.length - 1];
-      const prevPoint = enrichedData[enrichedData.length - 2] || enrichedData[0];
-      
-      const current = lastPoint.close;
-      const previous = prevPoint.close;
-      const change = ((current - previous) / previous) * 100;
-      
-      setCurrentPrice(current.toFixed(5));
-      setPriceChange(`${change >= 0 ? '+' : ''}${change.toFixed(3)}%`);
-      setIsPositive(change >= 0);
+  setIsLoadingData(true);
+  // Use activePair for fetching data
+  const rawData = await fetchMarketData(activePair, '15'); // 15-minute candles
+  // Add SMA, RSI, Bollinger Bands locally
+  const enrichedData = enrichDataWithIndicators(rawData);
+  setChartData(enrichedData);
 
-      const highs = enrichedData.map(d => d.high);
-      const lows = enrichedData.map(d => d.low);
-      setDayHigh(Math.max(...highs).toFixed(5));
-      setDayLow(Math.min(...lows).toFixed(5));
-    }
-    
-    setIsLoadingData(false);
-  };
+  if (enrichedData.length > 0) {
+    const lastPoint = enrichedData[enrichedData.length - 1];
+    const prevPoint = enrichedData[enrichedData.length - 2] || enrichedData[0];
+    // ... rest of the function
+  }
+
+  setIsLoadingData(false);
+};
 
   const handleScanRequest = async (imageFile: File | null) => {
     if (isScanning) return;

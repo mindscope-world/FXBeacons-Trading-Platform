@@ -2,7 +2,9 @@ import { GoogleGenAI, GenerateContentResponse, Type } from "@google/genai";
 import { ExpertType, TradeSignal, ScreenerTicker } from '../types';
 import { EXPERT_PROMPTS } from '../constants';
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const ai = new GoogleGenAI({
+  apiKey: import.meta.env.VITE_GEMINI_API_KEY as string,
+});
 
 // Helper to convert file to Base64
 export const fileToGenerativePart = async (file: File): Promise<{ inlineData: { data: string; mimeType: string } }> => {
