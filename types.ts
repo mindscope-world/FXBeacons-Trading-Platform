@@ -84,6 +84,7 @@ export interface ScreenerTicker {
   trend: 'UP' | 'DOWN' | 'SIDEWAYS';
   signal: 'STRONG_BUY' | 'BUY' | 'NEUTRAL' | 'SELL' | 'STRONG_SELL';
   volatility: 'LOW' | 'MEDIUM' | 'HIGH';
+  timestamp?: string; // EAT (+3) from backend screener
 }
 
 export interface TradeHistoryItem {
