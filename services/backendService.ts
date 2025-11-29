@@ -1,4 +1,24 @@
 import { API_BASE_URL } from '../config';
+import { ScreenerQuote } from '../types';
+
+export async function getQuote(symbol: string): Promise<ScreenerQuote> {
+  const res = await fetch(
+    `${API_BASE_URL}/screener/quote?symbol=${encodeURIComponent(symbol)}`
+  );
+  if (!res.ok) throw new Error('Quote fetch failed');
+  const data = await res.json();
+  return data.quote;
+}
+
+export async function getLatestPrice(
+  symbol: string
+): Promise<{ symbol: string; price: number }> {
+  const res = await fetch(
+    `${API_BASE_URL}/screener/price?symbol=${encodeURIComponent(symbol)}`
+  );
+  if (!res.ok) throw new Error('Price fetch failed');
+  return res.json();
+}
 
 export async function getMarketAnalysis(symbol: string, interval: string) {
   const res = await fetch(`${API_BASE_URL}/analysis`, {

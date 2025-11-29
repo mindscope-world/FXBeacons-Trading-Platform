@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { ScreenerTicker } from '../types';
+import { ScreenerTicker, ScreenerQuote } from '../types';
+import { getQuote } from '../services/backendService';
 import { fetchScreenerData } from '../services/marketDataService';
 import { generateMarketReport } from '../services/geminiService';
 import {
@@ -33,6 +34,10 @@ const MarketScreener: React.FC<MarketScreenerProps> = ({ onSelectPair }) => {
   const [reportTicker, setReportTicker] = useState<ScreenerTicker | null>(null);
   const [reportContent, setReportContent] = useState('');
   const [reportLoading, setReportLoading] = useState(false);
+
+  // Quote state
+  const [quote, setQuote] = useState<ScreenerQuote | null>(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
 
   const lastUpdated = data.length > 0 ? data[0].timestamp : null;
 
@@ -106,6 +111,19 @@ const MarketScreener: React.FC<MarketScreenerProps> = ({ onSelectPair }) => {
     setReportContent('');
   };
 
+  const handleRowClick = async (symbol: string) => {
+    onSelectPair(symbol);
+    setQuoteLoading(true);
+    try {
+      const q = await getQuote(symbol);
+      setQuote(q);
+    } catch (e) {
+      console.error('Quote fetch failed', e);
+    } finally {
+      setQuoteLoading(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-gray-950 p-6 overflow-hidden relative">
       <div className="flex justify-between items-center mb-6">
@@ -122,6 +140,40 @@ const MarketScreener: React.FC<MarketScreenerProps> = ({ onSelectPair }) => {
               Last update (EAT):{' '}
               {new Date(lastUpdated).toLocaleString('en-KE', { hour12: false })}
             </p>
+          )}
+          {quote && (
+            <div className="mt-3 text-xs bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 flex flex-wrap gap-3 items-center">
+              <span className="font-mono text-gray-200">
+                {quote.symbol} {quote.currency ? `· ${quote.currency}` : ''}
+              </span>
+              <span className="font-mono text-sm text-gray-100">
+                Last: {quote.close?.toFixed(5) ?? '---'}
+              </span>
+              <span
+                className={`font-mono ${
+                  (quote.change ?? 0) >= 0
+                    ? 'text-trade-green'
+                    : 'text-trade-red'
+                }`}
+              >
+                {quote.change != null && quote.percent_change != null
+                  ? `${quote.change.toFixed(5)} (${quote.percent_change.toFixed(
+                      2
+                    )}%)`
+                  : '---'}
+              </span>
+              <span className="text-gray-400">
+                O:{quote.open?.toFixed(5) ?? '---'} H:
+                {quote.high?.toFixed(5) ?? '---'} L:
+                {quote.low?.toFixed(5) ?? '---'}
+              </span>
+              {quoteLoading && (
+                <span className="text-gray-500 flex items-center gap-1">
+                  <span className="w-3 h-3 border-2 border-trade-accent border-t-transparent rounded-full animate-spin" />
+                  Updating...
+                </span>
+              )}
+            </div>
           )}
         </div>
         <div className="relative">
@@ -198,7 +250,7 @@ const MarketScreener: React.FC<MarketScreenerProps> = ({ onSelectPair }) => {
             sortedData.map((ticker) => (
               <div
                 key={ticker.symbol}
-                onClick={() => onSelectPair(ticker.symbol)}
+                onClick={() => handleRowClick(ticker.symbol)}
                 className="grid grid-cols-8 p-4 border-b border-gray-800/50 hover:bg-gray-800 transition-colors items-center text-sm cursor-pointer group"
               >
                 <div className="font-bold text-gray-200 group-hover:text-trade-accent transition-colors col-span-1">
@@ -233,7 +285,8 @@ const MarketScreener: React.FC<MarketScreenerProps> = ({ onSelectPair }) => {
                 </div>
                 <div className="flex justify-center col-span-1">
                   <span
-                    className={`px-2 py-0.5 rounded text-[10px] font-medium flex items-center gap-1 border ${
+                    className={`px-2 py-0.5 rounded text-[10px] font-medium flex items
+-center gap-1 border ${
                       ticker.volatility === 'HIGH'
                         ? 'text-orange-400 border-orange-400/30 bg-orange-400/10'
                         : ticker.volatility === 'MEDIUM'
@@ -268,7 +321,7 @@ const MarketScreener: React.FC<MarketScreenerProps> = ({ onSelectPair }) => {
         </div>
       </div>
 
-            {/* Report Modal */}
+      {/* Report Modal */}
       {reportTicker && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-gray-900 w-full max-w-2xl rounded-xl border border-gray-700 shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">

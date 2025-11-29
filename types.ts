@@ -116,3 +116,20 @@ export interface UserProfile {
   totalTrades: number;
   profitFactor: number;
 }
+
+export interface ScreenerQuote {
+  symbol: string;
+  name?: string;
+  exchange?: string;
+  currency?: string;
+  datetime?: string;
+  open?: number;
+  high?: number;
+  low?: number;
+  close?: number;
+  volume?: number;
+  previous_close?: number;
+  change?: number;
+  percent_change?: number;
+  is_market_open?: boolean;
+}
